@@ -81,20 +81,38 @@ appSetup () {
 	else
 		cp /etc/samba/external/smb.conf /etc/samba/smb.conf
 	fi
+
+	# There may be some setup that needs to be done every time the
+	# container starts up. If so, run it first. It should be a
+	# regular BASH script, and will be sourced to pick up the
+	# environment variables above.
+	if [[ -f /etc/samba/external/startup.sh ]]; then
+		echo "Loading startup script ..."
+		source /etc/samba/external/startup.sh
+	else
+		echo "Skipping startup load, no script present."
+	fi
         
 	# Set up supervisor
-	echo "[supervisord]" > /etc/supervisor/conf.d/supervisord.conf
-	echo "nodaemon=true" >> /etc/supervisor/conf.d/supervisord.conf
-	echo "" >> /etc/supervisor/conf.d/supervisord.conf
-	echo "[program:samba]" >> /etc/supervisor/conf.d/supervisord.conf
-	echo "command=/usr/sbin/samba -i" >> /etc/supervisor/conf.d/supervisord.conf
+	SCONF="/etc/supervisor/conf.d/supervisord.conf"
+	cat - > "$SCONF" <<-EOF
+		[supervisord]
+		nodaemon=true
+
+		[program:samba]
+		command=/usr/sbin/samba -i
+
+		[program:ntp]
+		command=/usr/sbin/ntpd -g -G
+	EOF
+
 	if [[ ${MULTISITE,,} == "true" ]]; then
 		if [[ -n $VPNPID ]]; then
 			kill $VPNPID
 		fi
-		echo "" >> /etc/supervisor/conf.d/supervisord.conf
-		echo "[program:openvpn]" >> /etc/supervisor/conf.d/supervisord.conf
-		echo "command=/usr/sbin/openvpn --config /docker.ovpn" >> /etc/supervisor/conf.d/supervisord.conf
+		echo "" >> "$SCONF"
+		echo "[program:openvpn]" >> "$SCONF"
+		echo "command=/usr/sbin/openvpn --config /docker.ovpn" >> "$SCONF"
 	fi
 	
 	appStart
